@@ -1,70 +1,60 @@
 #!/bin/bash
-# NCPA Inventory — full setup & deploy
-# Run from your Mac Terminal: bash setup.sh
+# NCPA Inventory — Cloudflare Workers + D1 setup & deploy
+# Run from your terminal: bash setup.sh
 
 set -e
 
-SUPABASE_URL="https://kwwltskyhoahbahhokgf.supabase.co"
-SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d2x0c2t5aG9haGJhaGhva2dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1NzMzMDAsImV4cCI6MjA4OTE0OTMwMH0.ER_7LHxhiBHgLsIkk2OHgbrcodBhjTQY8HkC73n9SIQ"
-
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  NCPA INVENTORY — SETUP & DEPLOY"
+echo "  NCPA INVENTORY — SETUP & DEPLOY (Cloudflare)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# ── Step 1: Supabase migration via Management API ──────────────────────────
-echo "▶ Step 1/4  Running Supabase migration..."
-echo ""
-echo "  ⚠️  MANUAL STEP REQUIRED (30 seconds):"
-echo ""
-echo "  1. Open: https://supabase.com/dashboard/project/kwwltskyhoahbahhokgf/sql/new"
-echo "  2. Paste the contents of:  supabase/migration.sql"
-echo "  3. Click Run"
-echo "  4. Come back here and press ENTER"
-echo ""
-read -p "  Press ENTER when migration is done... "
-echo ""
-
-# ── Step 2: Install dependencies ──────────────────────────────────────────
-echo "▶ Step 2/4  Installing dependencies..."
+# ── Step 1: Install dependencies ────────────────────────────────────────
+echo "▶ Step 1/5  Installing dependencies..."
 npm install --silent
 echo "  ✓ Done"
 echo ""
 
-# ── Step 3: Seed database ─────────────────────────────────────────────────
-echo "▶ Step 3/4  Seeding 247 items into Supabase..."
-npm run seed
+# ── Step 2: Log in to Cloudflare ────────────────────────────────────────
+echo "▶ Step 2/5  Cloudflare login..."
+npx wrangler login
 echo ""
 
-# ── Step 4: Deploy to Vercel ──────────────────────────────────────────────
-echo "▶ Step 4/4  Deploying to Vercel..."
+# ── Step 3: Create the D1 database (skip if it already exists) ─────────
+echo "▶ Step 3/5  Create D1 database..."
+echo "  If this is your first run:"
+echo "    npx wrangler d1 create ncpa-inventory-db"
+echo "  Then copy the printed database_id into wrangler.toml"
+echo "  (replace REPLACE_WITH_YOUR_D1_DATABASE_ID)."
+echo ""
+read -p "  Press ENTER once wrangler.toml has a real database_id... "
 echo ""
 
-# Check if vercel CLI is installed
-if ! command -v vercel &> /dev/null; then
-  echo "  Installing Vercel CLI..."
-  npm install -g vercel --silent
+# ── Step 4: Run migrations + import inventory ───────────────────────────
+echo "▶ Step 4/5  Applying schema + importing inventory..."
+npx wrangler d1 migrations apply DB --local
+npx wrangler d1 migrations apply DB --remote
+
+if [ -f "./inventory.xlsx" ]; then
+  node scripts/import-inventory.mjs
+  npx wrangler d1 execute DB --local --file=./d1/seed.sql
+  npx wrangler d1 execute DB --remote --file=./d1/seed.sql
+  echo "  ✓ Inventory imported from inventory.xlsx"
+else
+  echo "  ⚠ No inventory.xlsx found in project root — skipping data import."
+  echo "    Drop your spreadsheet at ./inventory.xlsx and re-run:"
+  echo "    npm run db:import:remote"
 fi
-
-# Check if git repo exists
-if [ ! -d ".git" ]; then
-  git init
-  git add .
-  git commit -m "NCPA Inventory initial deploy" --quiet
-fi
-
-# Deploy
-vercel --yes \
-  --env NEXT_PUBLIC_SUPABASE_URL="$SUPABASE_URL" \
-  --env NEXT_PUBLIC_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
-  --build-env NEXT_PUBLIC_SUPABASE_URL="$SUPABASE_URL" \
-  --build-env NEXT_PUBLIC_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
-
 echo ""
+
+# ── Step 5: Deploy to Cloudflare Workers ─────────────────────────────────
+echo "▶ Step 5/5  Deploying to Cloudflare Workers..."
+npm run deploy
+echo ""
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  ✅  DONE"
 echo "  Your app is live at the URL above."
-echo "  Works on any device, anywhere."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""

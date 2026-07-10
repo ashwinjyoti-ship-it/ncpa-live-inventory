@@ -6,17 +6,25 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "seed": "node scripts/seed.mjs"
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "db:import:local": "node scripts/import-inventory.mjs && wrangler d1 execute DB --local --file=./d1/seed.sql",
+    "db:import:remote": "node scripts/import-inventory.mjs && wrangler d1 execute DB --remote --file=./d1/seed.sql"
   },
   "dependencies": {
-    "next": "14.2.5",
+    "next": "15.5.20",
     "react": "^18",
-    "react-dom": "^18",
-    "@supabase/supabase-js": "^2.43.4"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "autoprefixer": "^10.0.1",
     "postcss": "^8",
-    "tailwindcss": "^3.3.0"
+    "tailwindcss": "^3.3.0",
+    "@opennextjs/cloudflare": "^1.20.1",
+    "wrangler": "^4.86.0",
+    "xlsx": "^0.18.5"
   }
 }

@@ -3,3 +3,11 @@
 node_modules/
 .next/
 .vercel
+.wrangler/
+.open-next/
+cloudflare-env.d.ts
+
+# Generated from your local inventory sheet — regenerate with
+# `node scripts/import-inventory.mjs`, don't commit the raw data.
+inventory.xlsx
+d1/seed.sql

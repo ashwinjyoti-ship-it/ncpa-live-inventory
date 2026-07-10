@@ -1,68 +1,79 @@
 # NCPA Inventory Manager
 
-Audio equipment inventory app — Next.js 14 + Supabase + Vercel.
+Audio equipment inventory app — Next.js 15 + Cloudflare D1 + Cloudflare Workers.
 
 ## Stack
-- Next.js 14 (App Router)
-- Supabase (Postgres database)
+- Next.js 15 (App Router)
+- Cloudflare D1 (SQLite, serverless)
+- Cloudflare Workers (via the `@opennextjs/cloudflare` adapter)
 - Tailwind CSS
-- Deployed to `inventory.aishwin.net` via Vercel
 
 ---
 
 ## Setup (one time)
 
-### 1. Supabase — Run migration
-1. Go to [supabase.com](https://supabase.com) → your project → SQL Editor
-2. Paste contents of `supabase/migration.sql` → Run
-
-### 2. Supabase — Get anon key
-Project Settings → API → copy `anon public` key (starts with `eyJ...`)
-
-### 3. Environment variables
-```bash
-cp .env.example .env.local
-```
-Edit `.env.local`:
-```
-NEXT_PUBLIC_SUPABASE_URL=https://kwwltskyhoahbahhokgf.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...your_actual_key
-```
-
-### 4. Install & seed
+### 1. Install dependencies
 ```bash
 npm install
-npm run seed       # populates all 247 items across 6 venues
+```
+
+### 2. Log in to Cloudflare & create the D1 database
+```bash
+npx wrangler login
+npx wrangler d1 create ncpa-inventory-db
+```
+Copy the `database_id` it prints into `wrangler.toml` (replace
+`REPLACE_WITH_YOUR_D1_DATABASE_ID`).
+
+### 3. Apply the schema
+```bash
+npm run db:migrate:local     # local dev database (used by `next dev` / preview)
+npm run db:migrate:remote    # production database on Cloudflare
+```
+
+### 4. Import your inventory spreadsheet
+Drop your Excel export at `./inventory.xlsx` (columns: `Venue`, `Category`,
+`Item`, `Qty` — header names are matched case-insensitively; see
+`scripts/import-inventory.mjs` if your columns are named differently), then:
+```bash
+npm run db:import:local     # generates d1/seed.sql and loads it locally
+npm run db:import:remote    # loads the same data into production
+```
+Re-run these any time the source spreadsheet changes — they fully replace
+the `venues`/`categories`/`items` tables.
+
+### 5. Run locally
+```bash
 npm run dev        # http://localhost:3000
+```
+D1 access during `npm run dev` is wired up via `initOpenNextCloudflareForDev()`
+in `next.config.mjs`, so API routes read/write the **local** D1 database
+created in step 3.
+
+To test in an environment closer to production (actual `workerd` runtime):
+```bash
+npm run preview    # builds + serves via wrangler at http://localhost:8787
 ```
 
 ---
 
-## Deploy to Vercel
+## Deploy to Cloudflare Workers
 
 ```bash
-# Push to GitHub first
-git init
-git add .
-git commit -m "init"
-git remote add origin https://github.com/ashwinjyoti-ship-it/ncpa-inventory.git
-git push -u origin main
+npm run deploy
 ```
-
-Then on [vercel.com](https://vercel.com):
-1. Import the repo
-2. Add env vars: `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-3. Deploy
+This runs the OpenNext Cloudflare build (`opennextjs-cloudflare build`) and
+deploys the resulting Worker (`opennextjs-cloudflare deploy`). Verify in the
+Cloudflare dashboard (Workers & Pages → your Worker → Settings → Bindings)
+that the D1 binding `DB` is attached — it's normally picked up automatically
+from `wrangler.toml`.
 
 ### Custom domain — inventory.aishwin.net
 
-**In Vercel:** Project Settings → Domains → Add `inventory.aishwin.net`
-
-**In Cloudflare (aishwin.net):**
-- Add CNAME record: `inventory` → `cname.vercel-dns.com`
-- Proxy: DNS only (grey cloud, not orange)
-
-Done. Live at `https://inventory.aishwin.net`
+**In Cloudflare dashboard:** Workers & Pages → your Worker → Settings →
+Domains & Routes → Add Custom Domain → `inventory.aishwin.net` (this
+replaces the old Vercel CNAME setup; Cloudflare manages the DNS record
+automatically since the zone is already on Cloudflare).
 
 ---
 
@@ -82,17 +93,26 @@ Done. Live at `https://inventory.aishwin.net`
 ```
 app/
   layout.js          root layout + fonts
-  page.js            server component, fetches venues
+  page.js            server component, fetches venues (D1)
+  manage/page.js     management view, fetches venues (D1)
   globals.css        design tokens
   api/
-    items/route.js   GET/POST/PATCH/DELETE items
-    categories/route.js  GET/POST/DELETE categories
+    items/route.js         GET/POST/PATCH/DELETE items
+    categories/route.js    GET/POST/DELETE categories
+    venue-stats/route.js   aggregate stats
+    category-names/route.js
+    cross-venue/route.js
 components/
   InventoryApp.js    main client component
+  DashboardApp.js
 lib/
-  supabase.js        supabase client
+  db.js              D1 binding accessor (getCloudflareContext)
 scripts/
-  seed.mjs           one-time data seed
-supabase/
-  migration.sql      run in Supabase SQL editor
+  import-inventory.mjs   Excel -> d1/seed.sql converter
+d1/
+  migrations/0001_init.sql   D1 schema
+  seed.sql (generated, gitignored)
+wrangler.toml          Cloudflare Worker + D1 config
+open-next.config.ts     OpenNext adapter config
+next.config.mjs         wires up local D1 bindings for `next dev`
 ```

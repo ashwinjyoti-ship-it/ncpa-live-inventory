@@ -1,0 +1,14 @@
+name = "ncpa-inventory"
+main = ".open-next/worker.js"
+compatibility_date = "2025-06-20"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ncpa-inventory-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "d1/migrations"

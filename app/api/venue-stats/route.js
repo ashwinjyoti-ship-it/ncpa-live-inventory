@@ -1,29 +1,40 @@
-import { supabase } from '@/lib/supabase'
+import { getDB } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
+
 export async function GET() {
-  const [{ data: venues }, { data: cats }, { data: items }] = await Promise.all([
-    supabase.from('venues').select('id, name').order('name'),
-    supabase.from('categories').select('id, venue_id'),
-    supabase.from('items').select('qty, category_id, categories(venue_id)'),
-  ])
+  const db = await getDB()
 
-  const stats = {}
-  venues?.forEach(v => {
-    stats[v.id] = { id: v.id, name: v.name, categoryCount: 0, itemCount: 0, totalQty: 0 }
-  })
+  try {
+    const { results: venues } = await db.prepare('SELECT id, name FROM venues ORDER BY name').all()
 
-  cats?.forEach(c => {
-    if (stats[c.venue_id]) stats[c.venue_id].categoryCount++
-  })
+    const { results: rows } = await db
+      .prepare(
+        `SELECT
+           categories.venue_id AS venue_id,
+           COUNT(DISTINCT categories.id) AS category_count,
+           COUNT(items.id) AS item_count,
+           COALESCE(SUM(items.qty), 0) AS total_qty
+         FROM categories
+         LEFT JOIN items ON items.category_id = categories.id
+         GROUP BY categories.venue_id`
+      )
+      .all()
 
-  items?.forEach(item => {
-    const venueId = item.categories?.venue_id
-    if (venueId && stats[venueId]) {
-      stats[venueId].itemCount++
-      stats[venueId].totalQty += item.qty
-    }
-  })
+    const stats = {}
+    ;(venues || []).forEach((v) => {
+      stats[v.id] = { id: v.id, name: v.name, categoryCount: 0, itemCount: 0, totalQty: 0 }
+    })
+    ;(rows || []).forEach((r) => {
+      if (stats[r.venue_id]) {
+        stats[r.venue_id].categoryCount = r.category_count
+        stats[r.venue_id].itemCount = r.item_count
+        stats[r.venue_id].totalQty = r.total_qty
+      }
+    })
 
-  return NextResponse.json(Object.values(stats))
+    return NextResponse.json(Object.values(stats))
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }
