@@ -1,0 +1,8 @@
+name = "ncpa-crew-inventory"
+compatibility_date = "2025-04-01"
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ncpa-crew-stocktake-db"
+database_id = "4947dd07-09ea-4f55-aa53-c4843e2fd0d9"
