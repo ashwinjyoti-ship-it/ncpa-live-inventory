@@ -1,38 +1,35 @@
 # NCPA Inventory Manager
 
-Audio equipment inventory app — Next.js 14 + Supabase + Vercel.
+Audio equipment inventory app — Next.js 14 + Neon Postgres + Vercel.
 
 ## Stack
 - Next.js 14 (App Router)
-- Supabase (Postgres database)
+- Neon (Postgres database)
 - Tailwind CSS
-- Deployed to `inventory.aishwin.net` via Vercel
+- Deployed to `inventory.aishwin.net` / `ncpa-inventory-v2.vercel.app` via Vercel
 
 ---
 
 ## Setup (one time)
 
-### 1. Supabase — Run migration
-1. Go to [supabase.com](https://supabase.com) → your project → SQL Editor
-2. Paste contents of `supabase/migration.sql` → Run
+### 1. Neon — Create database
+1. Create a Neon project (or claim a temporary DB from [neon.new](https://neon.new))
+2. Copy the connection string (`DATABASE_URL`)
 
-### 2. Supabase — Get anon key
-Project Settings → API → copy `anon public` key (starts with `eyJ...`)
-
-### 3. Environment variables
+### 2. Environment variables
 ```bash
 cp .env.example .env.local
 ```
 Edit `.env.local`:
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://kwwltskyhoahbahhokgf.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...your_actual_key
+DATABASE_URL=postgresql://...
 ```
 
-### 4. Install & seed
+### 3. Install, migrate & seed
 ```bash
 npm install
-npm run seed       # populates all 247 items across 6 venues
+psql "$DATABASE_URL" -f supabase/migration.sql
+npm run seed       # populates all items across 6 venues
 npm run dev        # http://localhost:3000
 ```
 
@@ -42,16 +39,12 @@ npm run dev        # http://localhost:3000
 
 ```bash
 # Push to GitHub first
-git init
-git add .
-git commit -m "init"
-git remote add origin https://github.com/ashwinjyoti-ship-it/ncpa-inventory.git
 git push -u origin main
 ```
 
 Then on [vercel.com](https://vercel.com):
-1. Import the repo
-2. Add env vars: `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+1. Import the repo `ashwinjyoti-ship-it/ncpa-live-inventory`
+2. Add env var: `DATABASE_URL`
 3. Deploy
 
 ### Custom domain — inventory.aishwin.net
@@ -90,9 +83,9 @@ app/
 components/
   InventoryApp.js    main client component
 lib/
-  supabase.js        supabase client
+  db.js              Neon SQL client
 scripts/
   seed.mjs           one-time data seed
 supabase/
-  migration.sql      run in Supabase SQL editor
+  migration.sql      Postgres schema (Neon)
 ```
