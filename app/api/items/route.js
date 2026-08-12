@@ -1,70 +1,145 @@
-import { supabase } from '@/lib/supabase'
+export const dynamic = 'force-dynamic'
+
+import { sql } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
 export async function GET(req) {
-  const { searchParams } = new URL(req.url)
-  const venue_id = searchParams.get('venue_id')
-  const q = searchParams.get('q')
+  try {
+    const { searchParams } = new URL(req.url)
+    const venue_id = searchParams.get('venue_id')
+    const q = searchParams.get('q')
 
-  let query = supabase
-    .from('items')
-    .select('*, categories(id, name, venue_id, position)')
-    .order('position', { foreignTable: 'categories' })
-    .order('name')
+    let rows
+    if (venue_id && q) {
+      rows = await sql`
+        SELECT i.*,
+          json_build_object(
+            'id', c.id,
+            'name', c.name,
+            'venue_id', c.venue_id,
+            'position', c.position
+          ) AS categories
+        FROM items i
+        JOIN categories c ON c.id = i.category_id
+        WHERE c.venue_id = ${venue_id}
+          AND i.name ILIKE ${'%' + q + '%'}
+        ORDER BY c.position, i.name
+      `
+    } else if (venue_id) {
+      rows = await sql`
+        SELECT i.*,
+          json_build_object(
+            'id', c.id,
+            'name', c.name,
+            'venue_id', c.venue_id,
+            'position', c.position
+          ) AS categories
+        FROM items i
+        JOIN categories c ON c.id = i.category_id
+        WHERE c.venue_id = ${venue_id}
+        ORDER BY c.position, i.name
+      `
+    } else if (q) {
+      rows = await sql`
+        SELECT i.*,
+          json_build_object(
+            'id', c.id,
+            'name', c.name,
+            'venue_id', c.venue_id,
+            'position', c.position
+          ) AS categories
+        FROM items i
+        JOIN categories c ON c.id = i.category_id
+        WHERE i.name ILIKE ${'%' + q + '%'}
+        ORDER BY c.position, i.name
+      `
+    } else {
+      rows = await sql`
+        SELECT i.*,
+          json_build_object(
+            'id', c.id,
+            'name', c.name,
+            'venue_id', c.venue_id,
+            'position', c.position
+          ) AS categories
+        FROM items i
+        JOIN categories c ON c.id = i.category_id
+        ORDER BY c.position, i.name
+      `
+    }
 
-  if (venue_id) {
-    query = query.eq('categories.venue_id', venue_id)
+    return NextResponse.json(rows)
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  if (q) {
-    query = query.ilike('name', `%${q}%`)
-  }
-
-  const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
 }
 
 export async function POST(req) {
-  const body = await req.json()
-  const { name, qty, category_id } = body
-  if (!name || !category_id) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  try {
+    const body = await req.json()
+    const { name, qty, category_id } = body
+    if (!name || !category_id) {
+      return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+    }
 
-  const { data, error } = await supabase
-    .from('items')
-    .insert({ name: name.trim().toUpperCase(), qty: qty || 0, category_id })
-    .select()
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+    const rows = await sql`
+      INSERT INTO items (name, qty, category_id)
+      VALUES (${name.trim().toUpperCase()}, ${qty || 0}, ${category_id})
+      RETURNING *
+    `
+    return NextResponse.json(rows[0])
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }
 
 export async function PATCH(req) {
-  const body = await req.json()
-  const { id, name, qty } = body
-  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+  try {
+    const body = await req.json()
+    const { id, name, qty } = body
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-  const updates = {}
-  if (name !== undefined) updates.name = name.trim().toUpperCase()
-  if (qty !== undefined) updates.qty = qty
+    let rows
+    if (name !== undefined && qty !== undefined) {
+      rows = await sql`
+        UPDATE items
+        SET name = ${name.trim().toUpperCase()}, qty = ${qty}, updated_at = now()
+        WHERE id = ${id}
+        RETURNING *
+      `
+    } else if (name !== undefined) {
+      rows = await sql`
+        UPDATE items
+        SET name = ${name.trim().toUpperCase()}, updated_at = now()
+        WHERE id = ${id}
+        RETURNING *
+      `
+    } else if (qty !== undefined) {
+      rows = await sql`
+        UPDATE items
+        SET qty = ${qty}, updated_at = now()
+        WHERE id = ${id}
+        RETURNING *
+      `
+    } else {
+      rows = await sql`SELECT * FROM items WHERE id = ${id}`
+    }
 
-  const { data, error } = await supabase
-    .from('items')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+    return NextResponse.json(rows[0])
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }
 
 export async function DELETE(req) {
-  const { searchParams } = new URL(req.url)
-  const id = searchParams.get('id')
-  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-  const { error } = await supabase.from('items').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true })
+    await sql`DELETE FROM items WHERE id = ${id}`
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 }
